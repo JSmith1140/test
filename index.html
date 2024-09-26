@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSC3210 Puzzle Pandamonium</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+<canvas id="myCanvas" width="1200" height="900"></canvas>
+
+<script type="module">
+import * as THREE from 'three'; // Imports the THREE.js library
+
+// sets up the scene
+const canvas = document.getElementById('myCanvas');
+const scene = new THREE.Scene();
+// creates the perspective camera
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 3000);
+camera.position.z = 1500; // how far back the camera is to the canvas
+camera.lookAt(new THREE.Vector3(0.0, 0.0, 0.0)); // looks at origin
+scene.add(camera); // adds the camera to the scene
+
+// WebGL render
+const renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
+renderer.setClearColor(0xFFFFFF); // Sets background color to white
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+// Define vertices of the octagon
+const octagonVertices = [
+    new THREE.Vector2(-250, -125), //0
+    new THREE.Vector2(-125, -250), //1
+    new THREE.Vector2(125, -250), //2
+    new THREE.Vector2(250, -125), //3
+    new THREE.Vector2(250, 125), //4
+    new THREE.Vector2(125, 250), //5
+    new THREE.Vector2(-125, 250), //6
+    new THREE.Vector2(-250, 125) //7
+];
+
+// Function to generate random internal vertices
+function generateRandomVertices() {
+    return [
+        new THREE.Vector2(Math.random() * 100 - 50, Math.random() * 100 - 50), 
+        new THREE.Vector2(Math.random() * 100 - 50, Math.random() * 100 - 50)
+    ];
+}
+
+// Function to find the closest internal vertex
+function closestInternalVertex(vertex) {
+    return internalVertices.reduce((closest, current) => {
+        return vertex.distanceTo(current) < vertex.distanceTo(closest) ? current : closest;
+    });
+}
+
+// Generate random internal vertices
+const internalVertices = generateRandomVertices();
+
+// Array to hold predefined triangles
+const predefinedTriangles = [];
+
+// Create triangles and store edges
+for (let i = 0; i < octagonVertices.length; i++) {
+    const vertex1 = octagonVertices[i];
+    const vertex2 = octagonVertices[(i + 1) % octagonVertices.length]; // Wrap around
+    const closest = closestInternalVertex(vertex1);
+    predefinedTriangles.push([vertex1, closest, vertex2]);
+}
+
+// Function to find an octagon vertex that forms the gap
+function findGapOctagonVertex() {
+    return octagonVertices.reduce((closest, current) => {
+        return internalVertices[0].distanceTo(current) < internalVertices[0].distanceTo(closest) ? current : closest;
+    });
+}
+
+// Find the gap vertex
+let gapVertex = findGapOctagonVertex();
+
+// Find the index of the gap vertex
+const gapVertexIndex = octagonVertices.indexOf(gapVertex);
+// Calculate the next (right) vertex
+const rightGapVertex = octagonVertices[(gapVertexIndex + 1) % octagonVertices.length];
+
+// Create the last two triangles using the right octagon vertex
+predefinedTriangles.push([
+    rightGapVertex, internalVertices[0], internalVertices[1] // First of the last two triangles
+]);
+
+// Find the opposite vertex to the rightGapVertex for the second triangle
+const oppositeRightGapVertex = octagonVertices[(octagonVertices.indexOf(rightGapVertex) + 4) % octagonVertices.length];
+
+predefinedTriangles.push([
+    oppositeRightGapVertex, internalVertices[0], internalVertices[1] // Second of the last two triangles
+]);
+
+// Spread out triangle positions
+const trianglePositions = [
+    { x: -400, y: -150 }, // Position for triangle 1
+    { x: -450, y: 200 },  // Position for triangle 2
+    { x: 300, y: -200 },  // Position for triangle 3
+    { x: 350, y: 100 },   // Position for triangle 4
+    { x: -400, y: -450 }, // Position for triangle 5
+    { x: 150, y: -450 },  // Position for triangle 6
+    { x: -250, y: 100 },  // Position for triangle 7
+    { x: 200, y: 150 },   // Position for triangle 8
+    { x: 100, y: -450 },  // Position for triangle 9
+    { x: 500, y: 300 }    // Position for triangle 10
+];
+
+// triangleTargets for the 'snapping' feature
+const triangleTargets = Array(10).fill({ x: 0, y: 0 });
+
+function createTriangle(vertices) {
+    const triangleShape = new THREE.Shape();
+    triangleShape.moveTo(vertices[0].x, vertices[0].y);
+    triangleShape.lineTo(vertices[1].x, vertices[1].y);
+    triangleShape.lineTo(vertices[2].x, vertices[2].y);
+    triangleShape.closePath();
+    return triangleShape; 
+}
+
+const triangleMeshes = []; // array that holds triangle meshes
+
+// Add triangles to the scene at predetermined positions
+function addTrianglesToScene(triangles, positions) {
+    triangles.forEach((vertices, index) => {
+        const triangle = createTriangle(vertices); // create triangle shape
+        const geometry = new THREE.ShapeGeometry(triangle);
+        const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff, side: THREE.DoubleSide }); // random color
+        const mesh = new THREE.Mesh(geometry, material); // create mesh from geometry and material
+
+        mesh.position.set(positions[index].x, positions[index].y, 0);
+        mesh.targetPosition = new THREE.Vector3(triangleTargets[index].x, triangleTargets[index].y, 0); // Set target position for snapping later
+        mesh.snapped = false; // Track if the triangle is snapped
+        triangleMeshes.push(mesh); // push mesh into triangleMeshes array
+        scene.add(mesh); // adds mesh to the scene
+    });
+}
+
+// Function to create the octagon outline
+function createOctagon() {
+    const geometry = new THREE.BufferGeometry().setFromPoints(octagonVertices);
+    const material = new THREE.LineBasicMaterial({ color: 0x000000 }); // color black
+    const outlinedOctagon = new THREE.LineLoop(geometry, material); // uses LineLoop to draw the outline
+    scene.add(outlinedOctagon); // adds octagon outline to the scene
+}
+
+createOctagon(); // calls the createOctagon function
+addTrianglesToScene(predefinedTriangles, trianglePositions); // Use predefined triangles and their positions
+
+// Handle mouse events for dragging
+let selectedMesh = null;
+let mousePosition = new THREE.Vector2();
+let offset = new THREE.Vector3();
+
+function onMouseDown(event) {
+    mousePosition.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mousePosition.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mousePosition, camera);
+
+    const intersects = raycaster.intersectObjects(triangleMeshes);
+    if (intersects.length > 0) {
+        selectedMesh = intersects[0].object;
+
+        // Allow dragging only if not snapped
+        if (!selectedMesh.snapped) {
+            const intersectionPoint = intersects[0].point;
+            offset.copy(selectedMesh.position).sub(intersectionPoint);
+        } else {
+            selectedMesh = null; // Don't select snapped triangles
+        }
+    }
+}
+
+function onMouseMove(event) {
+    if (selectedMesh) {
+        mousePosition.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mousePosition.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mousePosition, camera);
+        const intersection = raycaster.intersectObject(selectedMesh);
+
+        if (intersection.length > 0) {
+            selectedMesh.position.copy(intersection[0].point).add(offset);
+        }
+    }
+}
+
+var click = new Audio('click.mp3'); //audio for when piece clicks in place
+
+function onMouseUp() {
+    if (selectedMesh) { // If a mesh is selected
+        const targetPos = selectedMesh.targetPosition; // Get target position for snapping
+        const distance = selectedMesh.position.distanceTo(targetPos); // Calculate distance to target position
+
+        if (distance < 20) { // how close piece needs to be to snap
+            selectedMesh.position.copy(targetPos); // Snap to target position
+            selectedMesh.snapped = true; // Mark triangle as snapped
+            click.play(); //plays click audio
+            selectedMesh.material = new THREE.MeshBasicMaterial({color : 0x00ff00, side : THREE.DoubleSide });
+        }
+        selectedMesh = null;
+    }
+}
+
+// add the mouse events to canvas
+canvas.addEventListener('mousedown', onMouseDown);
+canvas.addEventListener('mousemove', onMouseMove);
+canvas.addEventListener('mouseup', onMouseUp);
+
+// Animation loop
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera); // renders the scene
+}
+
+animate(); // calls animate function
+</script>
+</body>
+</html>
